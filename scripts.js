@@ -1,5 +1,24 @@
+const auth = firebase.auth();
+const db   = firebase.firestore();
+
+auth.onAuthStateChanged(async user => {
+     if (!user) {
+       window.location = 'login.html';
+       return;
+     }
+     // Armazena o uid na variável local usada pelo saveAll()/loadFromFirestore:
+     currentUserId = user.uid;
+     showLoading();
+     // Depois, carregue os dados:
+     await loadFromFirestore();
+     initApp();
+     hideLoading();
+  });
+
+
 let lists = [];
 let currentListId = null;
+let currentUserId = null;
 let itemToDeleteId = null;
 let deleteType = null;
 let selectedCategory = null;
@@ -13,71 +32,35 @@ const sidebar = document.querySelector(".sidebar");
 const menuToggle = document.getElementById("menuToggle");
 const mainContent = document.getElementById("mainContent");
 
-// Funções de LocalStorage
-function saveToLocalStorage() {
-  localStorage.setItem("lists", JSON.stringify(lists));
-  localStorage.setItem("currentListId", JSON.stringify(currentListId));
-}
 
-function loadFromLocalStorage() {
-  const storedLists = localStorage.getItem("lists");
-  const storedCurrentListId = localStorage.getItem("currentListId");
-
-  if (storedLists) {
-    try {
-      lists = JSON.parse(storedLists);
-    } catch (e) {
-      console.error("Erro ao carregar listas do LocalStorage:", e);
-      lists = [];
-    }
-  }
-
-  if (storedCurrentListId !== null) {
-    try {
-      currentListId = JSON.parse(storedCurrentListId);
-    } catch (e) {
-      console.error("Erro ao carregar currentListId do LocalStorage:", e);
-      currentListId = null;
-    }
-  }
-
-  if (lists.length === 0) {
-    addList("Lista de Compras");
-
-    // Adicionando as categorias
-    addCategory("Higiene Pessoal");
-    addCategory("Limpeza");
-    addCategory("Mercearia");
-    addCategory("Molhos");
-    addCategory("Frutas");
-    addCategory("Frios e Laticínios");
-    addCategory("Temperos");
-    addCategory("Utilidades");
-  }
-}
-
-// Toggle Sidebar
 function toggleSidebar() {
   sidebar.classList.toggle("active");
 
+  // Trocar o ícone de hambúrguer para "X" ou vice-versa
+  const icon = menuToggle.querySelector("i");
   if (sidebar.classList.contains("active")) {
-    menuToggle.style.left = "265px";
+    icon.classList.remove("bi-list");
+    icon.classList.add("bi-x");
   } else {
-    menuToggle.style.left = "15px";
+    icon.classList.remove("bi-x");
+    icon.classList.add("bi-list");
   }
 }
 
-// Toggle Sidebar
 menuToggle.addEventListener("click", toggleSidebar);
+
 document.addEventListener("click", function (event) {
   const isClickInsideSidebar = sidebar.contains(event.target);
   const isClickInsideToggleButton = menuToggle.contains(event.target);
 
   if (!isClickInsideSidebar && !isClickInsideToggleButton) {
     sidebar.classList.remove("active");
-    menuToggle.style.left = "15px";
+    const icon = menuToggle.querySelector("i");
+    icon.classList.remove("bi-x");
+    icon.classList.add("bi-list");
   }
 });
+
 
 // Função para adicionar uma nova lista
 document
@@ -114,7 +97,8 @@ async function addList(name) {
 
   lists.push(newList);
   currentListId = newList.id;
-  saveToLocalStorage();
+  saveAll();
+
   initCategories();
   renderListsInSidebar();
   switchToList(newList.id);
@@ -126,7 +110,8 @@ function addCategory(name) {
   if (!currentList) return;
 
   currentList.categories.push(name);
-  saveToLocalStorage();
+  saveAll();
+
 }
 
 // Adicionar Categoria no Modal de Adicionar Produto
@@ -245,7 +230,8 @@ function updateProduct(productId, name, category, quantity, quantityType) {
     product.category = category;
     product.quantity = parseInt(quantity);
     product.quantityType = quantityType;
-    saveToLocalStorage();
+    saveAll();
+
     updateSummary();
     renderCategories();
   }
@@ -272,7 +258,8 @@ function switchToList(id) {
     document.querySelector(".header h1").textContent = currentList.name;
   }
 
-  saveToLocalStorage();
+  saveAll();
+
   initCategories();
 
   toggleSidebar();
@@ -327,7 +314,8 @@ function updateProductQuantity(id, newQuantity) {
     const quantity = parseInt(newQuantity);
     if (quantity > 0) {
       product.quantity = quantity;
-      saveToLocalStorage();
+      saveAll();
+
       updateSummary();
       renderCategories();
     } else {
@@ -541,7 +529,8 @@ function addProduct(name, category, quantity, quantityType) {
     completed: false,
   };
   currentList.productList.push(newProduct);
-  saveToLocalStorage();
+  saveAll();
+
   updateSummary();
   renderCategories();
 }
@@ -554,7 +543,8 @@ function toggleProductStatus(id) {
   const product = currentList.productList.find((prod) => prod.id === id);
   if (product) {
     product.completed = !product.completed;
-    saveToLocalStorage();
+    saveAll();
+
     updateSummary();
     renderCategories();
   }
@@ -680,7 +670,8 @@ function deleteList(listId) {
     location.reload();
   }
 
-  saveToLocalStorage();
+  saveAll();
+
   renderListsInSidebar();
 }
 
@@ -695,7 +686,8 @@ function deleteCategory(name) {
     (prod) => prod.category !== name
   );
 
-  saveToLocalStorage();
+  saveAll();
+
   initCategories();
   renderCategoriesInProductModal();
 }
@@ -709,7 +701,8 @@ function deleteProduct(id) {
     (product) => product.id !== id
   );
 
-  saveToLocalStorage();
+  saveAll();
+
   updateSummary();
   renderCategories();
 }
@@ -750,13 +743,44 @@ function renderListsInSidebar() {
   });
 }
 
-function initApp() {
-  loadFromLocalStorage();
-  if (!currentListId && lists.length > 0) {
-    currentListId = lists[0].id;
-    saveToLocalStorage();
+// 4.1 Carrega do Firestore para memória
+async function loadFromFirestore() {
+  const doc = await db.collection('users')
+                      .doc(currentUserId)
+                      .get();
+  if (doc.exists) {
+    const data = doc.data();
+    lists = data.lists || [];
+    currentListId = data.currentListId ?? (lists[0]?.id || null);
+  } else {
+    // Primeiro login: já deixa vazio para criar lista inicial
+    lists = [];
+    currentListId = null;
   }
+}
 
+// 4.2 Salva no Firestore + opcional localStorage
+function saveAll() {
+  // (opcional) mantem local para offline:
+  localStorage.setItem('lists', JSON.stringify(lists));
+  localStorage.setItem('currentListId', JSON.stringify(currentListId));
+
+  // grava no Firestore
+  return db.collection('users')
+           .doc(currentUserId)
+           .set({
+             lists,
+             currentListId
+           }, { merge: true });
+}
+
+
+function initApp() {
+    // Se for o primeiro login e não houver lista
+    if (!currentListId && lists.length > 0) {
+     currentListId = lists[0].id;
+      saveAll().catch(console.error);
+    }
   const currentList = getCurrentList();
   if (currentList) {
     document.title = currentList.name;
@@ -767,4 +791,14 @@ function initApp() {
   renderListsInSidebar();
 }
 
-document.addEventListener("DOMContentLoaded", initApp);
+// Botão de logout
+document.getElementById('logoutBtn').addEventListener('click', () => {
+  auth.signOut()
+    .then(() => {
+      window.location.href = 'login.html'; // Redireciona para login após sair
+    })
+    .catch(error => {
+      console.error('Erro ao fazer logout:', error);
+      alert('Erro ao sair. Tente novamente.');
+    });
+});

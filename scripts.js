@@ -56,19 +56,19 @@ function loadFromLocalStorage() {
     
         // Adicionando produtos nas categorias correspondentes
         // Higiene Pessoal
-        addProduct('Shampoo/Condicionador', 'Higiene Pessoal', 1, 'Unidade');
+        addProduct('Shampoo Cond', 'Higiene Pessoal', 1, 'Unidade');
         addProduct('Desodorante', 'Higiene Pessoal', 1, 'Unidade');
         addProduct('Cotonete', 'Higiene Pessoal', 1, 'Unidade');
-        addProduct('Algodão', 'Higiene Pessoal', 1, 'Unidade');
+        addProduct('Algodao', 'Higiene Pessoal', 1, 'Unidade');
         addProduct('Absorvente', 'Higiene Pessoal', 1, 'Unidade');
         addProduct('Fio dental', 'Higiene Pessoal', 1, 'Unidade');
-        addProduct('Papel higiênico', 'Higiene Pessoal', 1, 'Unidade');
+        addProduct('Papel higienico', 'Higiene Pessoal', 1, 'Unidade');
         addProduct('Sabonete', 'Higiene Pessoal', 1, 'Unidade');
         addProduct('Creme dental', 'Higiene Pessoal', 1, 'Unidade');
         addProduct('Esponja de banho', 'Higiene Pessoal', 1, 'Unidade');
     
         // Limpeza
-        addProduct('Sabão em pó', 'Limpeza', 1, 'Unidade');
+        addProduct('Sabao em po', 'Limpeza', 1, 'Unidade');
         addProduct('Amaciante', 'Limpeza', 1, 'Unidade');
         addProduct('Água sanitária', 'Limpeza', 1, 'Unidade');
         addProduct('Esponja de cozinha', 'Limpeza', 1, 'Unidade');
@@ -79,7 +79,7 @@ function loadFromLocalStorage() {
         addProduct('Inseticida', 'Limpeza', 1, 'Unidade');
         addProduct('Desengordurante', 'Limpeza', 1, 'Unidade');
         addProduct('Multiuso', 'Limpeza', 1, 'Unidade');
-        addProduct('Álcool', 'Limpeza', 1, 'Unidade');
+        addProduct('Alcool', 'Limpeza', 1, 'Unidade');
         addProduct('Palha de aço', 'Limpeza', 1, 'Unidade');
         addProduct('Saco de lixo', 'Limpeza', 1, 'Unidade');
         addProduct('Pinho', 'Limpeza', 1, 'Unidade');
@@ -88,18 +88,18 @@ function loadFromLocalStorage() {
         addProduct('Odorizante', 'Limpeza', 1, 'Unidade');
     
         // Mercearia
-        addProduct('Feijão', 'Mercearia', 1, 'Unidade');
+        addProduct('Feijao', 'Mercearia', 1, 'Unidade');
         addProduct('Arroz', 'Mercearia', 1, 'Unidade');
-        addProduct('Macarrão espaguete', 'Mercearia', 1, 'Unidade');
-        addProduct('Macarrão parafuso', 'Mercearia', 1, 'Unidade');
-        addProduct('Óleo', 'Mercearia', 1, 'Unidade');
-        addProduct('Óleo de soja', 'Mercearia', 1, 'Unidade');
+        addProduct('Macarrao espaguete', 'Mercearia', 1, 'Unidade');
+        addProduct('Macarrao parafuso', 'Mercearia', 1, 'Unidade');
+        addProduct('Oleo', 'Mercearia', 1, 'Unidade');
+        addProduct('Oleo de soja', 'Mercearia', 1, 'Unidade');
         addProduct('Ovos', 'Mercearia', 1, 'Unidade');
-        addProduct('Açúcar', 'Mercearia', 1, 'Unidade');
-        addProduct('Café', 'Mercearia', 1, 'Unidade');
+        addProduct('Açucar', 'Mercearia', 1, 'Unidade');
+        addProduct('Cafe', 'Mercearia', 1, 'Unidade');
         addProduct('Leite condensado', 'Mercearia', 1, 'Unidade');
         addProduct('Creme de leite', 'Mercearia', 1, 'Unidade');
-        addProduct('Chá', 'Mercearia', 1, 'Unidade');
+        addProduct('Cha', 'Mercearia', 1, 'Unidade');
         addProduct('Milho', 'Mercearia', 1, 'Unidade');
         addProduct('Cereal', 'Mercearia', 1, 'Unidade');
         addProduct('Biscoito', 'Mercearia', 1, 'Unidade');
@@ -435,9 +435,9 @@ function renderProducts(category) {
                     >
                     <button class="btn-increment" onclick="changeQuantity(${product.id}, 1); event.stopPropagation();">+</button>
                 </div>
-                <div>
-                    <button class="btn-edit" onclick="openEditProductModal(${product.id}); event.stopPropagation();">✎</button>
-                    <button class="btn-delete" onclick="openDeleteModal(${product.id}, 'product', '${product.name}'); event.stopPropagation();">✖</button>
+                <div class="icon-container">
+                    <button class="btn-edit" onclick="openEditProductModal(${product.id}); event.stopPropagation();"><i class="fas fa-edit"></i></button>
+                    <button class="btn-delete" onclick="openDeleteModal(${product.id}, 'product', '${product.name}'); event.stopPropagation();"><i class="fas fa-times"></i></button>
                 </div>
             </div>`
         ).join('');
@@ -589,7 +589,7 @@ function renderCategoriesInProductModal() {
 
         const deleteBtn = document.createElement('button');
         deleteBtn.classList.add('btn', 'btn-delete', 'btn-sm');
-        deleteBtn.innerHTML = '✖';
+        deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
         deleteBtn.onclick = () => openDeleteModal(category, 'category', category);
         li.appendChild(deleteBtn);
         categoriesList.appendChild(li);
@@ -684,7 +684,7 @@ function renderListsInSidebar() {
 
         const deleteBtn = document.createElement('button');
         deleteBtn.classList.add('btn', 'btn-delete', 'btn-sm');
-        deleteBtn.innerHTML = '✖';
+        deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
         deleteBtn.onclick = () => openDeleteModal(list.id, 'list', list.name);
 
         btnGroup.appendChild(deleteBtn);

@@ -11,6 +11,7 @@ auth.onAuthStateChanged(async user => {
      showLoading();
      // Depois, carregue os dados:
      await loadFromFirestore();
+     ensureInitialList()
      initApp();
      hideLoading();
   });
@@ -89,7 +90,7 @@ document
 // Função para adicionar uma nova lista
 async function addList(name) {
   const newList = {
-    id: Date.now(),
+    id: Date.now()  + Math.random(),
     name,
     categories: [],
     productList: [],
@@ -114,56 +115,34 @@ function addCategory(name) {
 
 }
 
-// Adicionar Categoria no Modal de Adicionar Produto
-document
-  .getElementById("addCategoryFormInProductModal")
-  .addEventListener("submit", function (event) {
-    event.preventDefault();
-    const categoryInput = document
-      .getElementById("newCategoryNameInProductModal")
-      .value.trim();
-
-    if (categoryInput === "") {
-      alert("Por favor, insira o nome da categoria.");
-      return;
-    }
-
-    const currentList = getCurrentList();
-    if (!currentList) return;
-
-    if (currentList.categories.includes(categoryInput)) {
-      alert("Esta categoria já existe.");
-      return;
-    }
-
-    addCategory(categoryInput);
-    document.getElementById("addCategoryFormInProductModal").reset();
-    renderCategoriesInProductModal();
-  });
-
-const addProductModalElement = document.getElementById("addProductModal");
-addProductModalElement.addEventListener("show.bs.modal", () => {
-  selectedCategory = null;
-  renderCategoriesListInProductModal();
-});
 
 function openEditProductModal(productId) {
   const currentList = getCurrentList();
   if (!currentList) return;
 
-  const product = currentList.productList.find((prod) => prod.id === productId);
+  // 1) Renderiza select e histórico para garantir que existam opções
+  renderCategorySelect();
+  renderPreviousProductsList();
+
+  // 2) Busca o produto e pré-preenche os campos
+  const product = currentList.productList.find((p) => p.id === productId);
   if (!product) return;
 
-  // Preencher os campos do modal com os dados do produto a ser editado
-  document.getElementById("productName").value = product.name;
-  document.getElementById("productQuantity").value = product.quantity;
-  document.getElementById("unidade").value = product.quantityType;
+  document.getElementById("productName").value      = product.name;
+  document.getElementById("productQuantity").value  = product.quantity;
+  document.getElementById("unidade").value          = product.quantityType;
+  document.getElementById("categorySelect").value   = product.category;
 
-  // Guardar o ID do produto para saber que estamos no modo de edição
-  document.getElementById("addProductForm").dataset.editingProductId =
-    productId;
+  // 3) Marca o form como “edição” para o submit saber
+  document.getElementById("addProductForm").dataset.editingProductId = productId;
 
-  // Abrir o modal
+  // 4) Garante que a aba “Novo” esteja ativa
+  const novoTabBtn = document.querySelector(
+    '#productTabs button[data-bs-target="#newProduct"]'
+  );
+  bootstrap.Tab.getOrCreateInstance(novoTabBtn).show();
+
+  // 5) Finalmente abre o modal
   const addProductModal = new bootstrap.Modal(
     document.getElementById("addProductModal")
   );
@@ -175,50 +154,59 @@ document
   .getElementById("addProductForm")
   .addEventListener("submit", function (event) {
     event.preventDefault();
-    const productName = document.getElementById("productName").value.trim();
-    const productQuantity = document.getElementById("productQuantity").value;
-    const quantityType = document.getElementById("unidade").value;
 
-    if (productName === "") {
-      alert("Por favor, insira o nome do produto.");
-      return;
+    const form = this;
+    // 1) Verifica se estamos editando (string ou undefined)
+    const editingId = form.dataset.editingProductId;
+    console.log("DEBUG: editingProductId =", editingId);
+
+    // 2) Campos
+    const productName    = document.getElementById("productName").value.trim();
+    const productQuantity= parseInt(document.getElementById("productQuantity").value, 10);
+    const quantityType   = document.getElementById("unidade").value;
+    const category       = document.getElementById("categorySelect").value;
+
+    // 3) Validações
+    if (!productName) {
+      return alert("Por favor, insira o nome do produto.");
     }
-
     if (productQuantity <= 0) {
-      alert("A quantidade deve ser pelo menos 1.");
-      return;
+      return alert("A quantidade deve ser pelo menos 1.");
+    }
+    if (!category) {
+      return alert("Selecione uma categoria.");
     }
 
-    if (!selectedCategory) {
-      alert("Por favor, selecione uma categoria.");
-      return;
-    }
-
-    const productId =
-      document.getElementById("addProductForm").dataset.editingProductId;
-
-    if (productId) {
-      // Modo de edição: Atualizar o produto existente
+    // 4) Atualiza ou cria
+    if (editingId) {
+      // edição
       updateProduct(
-        parseInt(productId),
+        parseInt(editingId, 10),
         productName,
-        selectedCategory,
+        category,
         productQuantity,
         quantityType
       );
-      delete document.getElementById("addProductForm").dataset.editingProductId;
+      // Limpa flag de edição
+      delete form.dataset.editingProductId;
     } else {
-      // Modo de criação: Adicionar um novo produto
-      addProduct(productName, selectedCategory, productQuantity, quantityType);
+      // criação
+      addProduct(
+        productName,
+        category,
+        productQuantity,
+        quantityType
+      );
     }
 
-    document.getElementById("addProductForm").reset();
-    selectedCategory = null;
-    const addProductModal = bootstrap.Modal.getInstance(
+    // 5) Fecha o modal e limpa form
+    form.reset();
+    const modal = bootstrap.Modal.getInstance(
       document.getElementById("addProductModal")
     );
-    addProductModal.hide();
+    modal.hide();
   });
+
 
 function updateProduct(productId, name, category, quantity, quantityType) {
   const currentList = getCurrentList();
@@ -263,6 +251,7 @@ function switchToList(id) {
   initCategories();
 
   toggleSidebar();
+  renderCategoriesInSidebar();
 
   const modalElement = document.getElementById("manageListsModal");
   const modalInstance = bootstrap.Modal.getInstance(modalElement);
@@ -460,9 +449,9 @@ function sanitizeCategoryName(category) {
 // Função para renderizar categorias e produtos
 function renderCategories() {
   const currentList = getCurrentList();
-  if (!currentList) return;
+  if (!currentList || !Array.isArray(currentList.categories)) return;
 
-  // Salvar o estado atual dos colapsos
+  // Salvar estado atual dos colapsos
   const collapseStates = {};
   document.querySelectorAll(".category-content").forEach((collapse) => {
     collapseStates[collapse.id] = collapse.classList.contains("show");
@@ -479,16 +468,40 @@ function renderCategories() {
       hasProducts = true;
       const categoryId =
         category.replace(/\s+/g, "-").toLowerCase() + "-" + currentList.id;
-      let categoryDiv = document.createElement("div");
+
+      // HTML da categoria com os botões e ícone animado
+      const categoryDiv = document.createElement("div");
       categoryDiv.classList.add("category", "mb-4");
+
       categoryDiv.innerHTML = `
-                <div class="category-title" data-bs-toggle="collapse" href="#${categoryId}" role="button" aria-expanded="false">
-                    <h3>${category}</h3> <h4><i class="bi bi-chevron-down"></i></h4>
-                </div>
-                <div class="collapse show category-content" id="${categoryId}">
-                    ${renderProducts(category)}
-                </div>
-            `;
+        <div class="category-title d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" href="#${categoryId}" aria-expanded="false">
+          <h3 class="mb-0 d-flex align-items-center gap-2">
+            ${category}
+            <i class="bi bi-chevron-down rotate-icon transition"></i>
+          </h3>
+          <div class="btn-group btn-group-sm" role="group">
+            <button class="btn btn-outline-danger btn-clean" title="Limpar produtos da categoria"><i class="fas fa-trash"></i></button>
+          </div>
+        </div>
+        <div class="collapse show category-content mt-2" id="${categoryId}">
+          ${renderProducts(category)}
+        </div>
+      `;
+
+      // Botões: excluir categoria e limpar produtos
+      const btnClean = categoryDiv.querySelector(".btn-clean");
+
+      btnClean.onclick = async () => {
+        if (confirm(`Remover todos os produtos da categoria "${category}"?`)) {
+          currentList.productList = currentList.productList.filter(p => p.category !== category);
+          await saveAll();
+          renderCategories();
+          renderCategoriesInSidebar();
+          renderCategorySelect();
+          renderPreviousProductsList();
+        }
+      };
+
       categoriesContainer.appendChild(categoryDiv);
     }
   });
@@ -505,6 +518,26 @@ function renderCategories() {
     }
   });
 
+  // Atualiza ícones de seta (animação)
+  document.querySelectorAll(".category-title").forEach((title) => {
+    const targetId = title.getAttribute("href")?.replace("#", "");
+    if (!targetId) return;
+
+    const icon = title.querySelector(".rotate-icon");
+    const collapseEl = document.getElementById(targetId);
+
+    if (collapseEl.classList.contains("show")) {
+      icon.classList.add("rotate-180");
+    } else {
+      icon.classList.remove("rotate-180");
+    }
+
+    // Evento de animação ao expandir/retrair
+    collapseEl.addEventListener("shown.bs.collapse", () => icon.classList.add("rotate-180"));
+    collapseEl.addEventListener("hidden.bs.collapse", () => icon.classList.remove("rotate-180"));
+  });
+
+  // Mensagem de lista vazia
   const emptyMessage = document.getElementById("empty-message");
   if (currentList.productList.length === 0) {
     emptyMessage.style.display = "block";
@@ -521,7 +554,7 @@ function addProduct(name, category, quantity, quantityType) {
   if (!currentList) return;
 
   const newProduct = {
-    id: Date.now(),
+    id: Date.now()  + Math.random(),
     name,
     category,
     quantity: parseInt(quantity),
@@ -680,17 +713,42 @@ function deleteCategory(name) {
   const currentList = getCurrentList();
   if (!currentList) return;
 
-  currentList.categories = currentList.categories.filter((cat) => cat !== name);
-
+  // 1) Remove a categoria e os produtos relacionados
+  currentList.categories = currentList.categories.filter(cat => cat !== name);
   currentList.productList = currentList.productList.filter(
-    (prod) => prod.category !== name
+    prod => prod.category !== name
   );
 
+  // 2) Persiste
   saveAll();
 
-  initCategories();
-  renderCategoriesInProductModal();
+  // 3) Atualiza apenas as UIs que existem:
+  renderCategoriesInSidebar();  // sidebar com contador + botão
+  renderCategories();           // view principal
+  renderCategorySelect();       // select do modal de produto
+
+  // 4) Se estiver usando quick‐add, esconde o grupo
+  const quick = document.getElementById("quickAddGroup");
+  if (quick) quick.style.display = "none";
 }
+
+document.getElementById("btnQuickAddSelected").addEventListener("click", () => {
+  const cat = document.getElementById("categorySelect").value;
+  if (!cat) return;
+
+  DEFAULT_PRODUCTS[cat].forEach(name => {
+    const cb = document.getElementById(`qprod-${name.replace(/\s+/g, "-")}`);
+    if (cb && cb.checked) {
+      // Adiciona direto via JS — sem usar o <form>
+      addProduct(name, cat, 1, "Unidade");
+    }
+  });
+
+  renderCategories();
+  renderCategorySelect();
+  document.getElementById("quickAddGroup").style.display = "none";
+});
+
 
 // Função para deletar o produto
 function deleteProduct(id) {
@@ -789,6 +847,7 @@ function initApp() {
 
   initCategories();
   renderListsInSidebar();
+  renderCategoriesInSidebar();
 }
 
 // Botão de logout
@@ -801,4 +860,370 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
       console.error('Erro ao fazer logout:', error);
       alert('Erro ao sair. Tente novamente.');
     });
+});
+
+function renderCategoriesInSidebar() {
+  const ul = document.getElementById("categoriesListInSidebar");
+  ul.innerHTML = "";
+  const currentList = getCurrentList();
+  if (!currentList || currentList.categories.length === 0) {
+    ul.innerHTML = '<li class="list-group-item">Nenhuma categoria.</li>';
+    return;
+  }
+
+  currentList.categories.forEach(cat => {
+    // conta quantos produtos existem nesta categoria
+    const count = currentList.productList.filter(p => p.category === cat).length;
+
+    // monta o <li> com nome + badge
+    const li = document.createElement("li");
+    li.className = "list-group-item d-flex justify-content-between align-items-center";
+    li.innerHTML = `
+      <span>${cat}</span>
+      <span class="d-flex align-items-center">
+        <span class="badge bg-secondary rounded-pill me-2">${count}</span>
+      </span>
+    `;
+
+    // botão de excluir
+    const btn = document.createElement("button");
+    btn.className = "btn btn-sm btn-danger";
+    btn.innerHTML = '<i class="fas fa-trash"></i>';
+    btn.onclick = () => {
+      deleteCategory(cat);
+      renderCategoriesInSidebar();
+      renderCategories();      // atualiza view principal
+      renderCategorySelect();  // atualiza select do modal
+    };
+
+    // insere o botão dentro do <li>, junto à badge
+    li.querySelector("span.d-flex").appendChild(btn);
+
+    ul.appendChild(li);
+  });
+}
+
+
+document
+  .getElementById("addCategoryFormInSidebar")
+  .addEventListener("submit", e => {
+    e.preventDefault();
+    const name = document.getElementById("newCategoryNameInSidebar").value.trim();
+    if (!name) return alert("Insira o nome da categoria.");
+    const currentList = getCurrentList();
+    if (currentList.categories.includes(name)) {
+      return alert("Categoria já existe.");
+    }
+    addCategory(name);            // já existente — só insere em currentList.categories
+    document.getElementById("addCategoryFormInSidebar").reset();
+    renderCategoriesInSidebar();
+    renderCategories();           // atualiza a lista principal
+  });
+
+  function renderPreviousProductsList() {
+    const ul = document.getElementById("previousProductsContainer");
+    ul.innerHTML = "";
+    const currentList = getCurrentList();
+    if (!currentList || currentList.productList.length === 0) {
+      ul.innerHTML = '<li class="list-group-item">Nenhum produto cadastrado.</li>';
+      return;
+    }
+    currentList.productList.forEach(prod => {
+      const li = document.createElement("li");
+      li.className = "list-group-item list-group-item-action";
+      li.textContent = prod.name;
+      li.onclick = () => prefillProduct(prod);
+      ul.appendChild(li);
+    });
+  }
+  
+  function prefillProduct(prod) {
+    // preenche os campos do form
+    document.getElementById("productName").value = prod.name;
+    document.getElementById("productQuantity").value = prod.quantity;
+    document.getElementById("unidade").value = prod.quantityType;
+    document.getElementById("categorySelect").value = prod.category;
+    // volta para aba “Novo”
+    bootstrap.Tab.getInstance(document.querySelector('#productTabs button[data-bs-target="#newProduct"]'))
+      .show();
+  }
+
+  function renderCategorySelect() {
+    const sel = document.getElementById("categorySelect");
+    const quickGroup = document.getElementById("quickAddGroup");
+    const quickSel   = document.getElementById("quickAddSelect");
+    sel.innerHTML = '<option value="">Selecione uma categoria</option>';
+    quickGroup.style.display = 'none';
+    quickSel.innerHTML = '<option value="">Escolha um produto</option>';
+  
+    const currentList = getCurrentList();
+    if (!currentList) return;
+  
+    currentList.categories.forEach(cat => {
+      const opt = document.createElement("option");
+      opt.value = cat;
+      opt.textContent = cat;
+      sel.appendChild(opt);
+    });
+  
+    sel.onchange = () => {
+      const cat = sel.value;
+      if (!cat || !DEFAULT_PRODUCTS[cat]) {
+        quickGroup.style.display = 'none';
+        return;
+      }
+      // Popula quickAdd com os produtos DEFAULT_PRODUCTS[cat]
+      quickSel.innerHTML = '<option value="">Escolha um produto</option>';
+      DEFAULT_PRODUCTS[cat].forEach(name => {
+        const o = document.createElement("option");
+        o.value = name;
+        o.textContent = name;
+        quickSel.appendChild(o);
+      });
+      quickGroup.style.display = 'block';
+    };
+  }
+  
+  // Adiciona produto “rápido” quando clicar no botão
+  document.getElementById("btnQuickAdd").addEventListener("click", () => {
+    const name   = document.getElementById("quickAddSelect").value;
+    const cat    = document.getElementById("categorySelect").value;
+    if (!name || !cat) return alert("Selecione categoria e produto rápido.");
+    addProduct(name, cat, 1, 'Unidade');
+    // Fecha o grupo e reseta
+    document.getElementById("quickAddGroup").style.display = 'none';
+    document.getElementById("quickAddSelect").value     = '';
+  });
+  
+  const addProductModalElement = document.getElementById("addProductModal");
+
+  addProductModalElement.addEventListener("show.bs.modal", (e) => {
+    const form = document.getElementById("addProductForm");
+    // Se veio do clique no “Adicionar Produto” (botão com id="btnAddProduct"), zera o form
+    if (e.relatedTarget && e.relatedTarget.id === "btnAddProduct") {
+      form.reset();
+      delete form.dataset.editingProductId;
+      // força a aba “Novo”
+      const novoTabBtn = document.querySelector(
+        '#productTabs button[data-bs-target="#newProduct"]'
+      );
+      bootstrap.Tab.getOrCreateInstance(novoTabBtn).show();
+    }
+    // Em qualquer caso, (re)renderiza categorias e histórico
+    renderCategorySelect();
+    renderPreviousProductsList();
+  });
+  
+const DEFAULT_CATEGORIES = [
+  "Higiene Pessoal",
+  "Limpeza",
+  "Mercearia",
+  "Molhos",
+  "Frios e Laticínios",
+  "Temperos",
+  "Utilidades"
+];
+
+const DEFAULT_PRODUCTS = {
+  "Higiene Pessoal": [
+    "Shampoo Cond",
+    "Desodorante",
+    "Cotonete",
+    "Algodao",
+    "Absorvente",
+    "Fio dental",
+    "Papel higienico",
+    "Sabonete",
+    "Creme dental",
+    "Esponja de banho"
+  ],
+  "Limpeza": [
+    "Sabao em po",
+    "Amaciante",
+    "Água sanitária",
+    "Esponja de cozinha",
+    "Esponja de banheiro",
+    "Flanela",
+    "Tira manchas",
+    "Detergente",
+    "Inseticida",
+    "Desengordurante",
+    "Multiuso",
+    "Alcool",
+    "Palha de aco",
+    "Saco de lixo",
+    "Pinho",
+    "Desinfetante",
+    "Pastilha de vaso",
+    "Odorizante"
+  ],
+  "Mercearia": [
+    "Feijao",
+    "Arroz",
+    "Macarrao espaguete",
+    "Macarrao parafuso",
+    "Oleo",
+    "Oleo de soja",
+    "Ovos",
+    "Açucar",
+    "Cafe",
+    "Leite condensado",
+    "Creme de leite",
+    "Cha",
+    "Milho",
+    "Cereal",
+    "Biscoito",
+    "Milho de pipoca",
+    "Erva de tereré"
+  ],
+  "Molhos": [
+    "Ketchup",
+    "Maionese",
+    "Molho de tomate",
+    "Extrato de tomate",
+    "Shoyo"
+  ],
+  "Frios e Laticínios": [
+    "Leite",
+    "Margarina"
+  ],
+  "Temperos": [
+    "Sal",
+    "Alho",
+    "Chimichurri",
+    "Salsa, alho e cebola",
+    "Paprica",
+    "Orégano"
+  ],
+  "Utilidades": [
+    "Papel toalha",
+    "Papel laminado",
+    "Palito de dente"
+  ]
+};
+
+
+  async function ensureInitialList() {
+    if (lists.length === 0) {
+      // Gera a lista de produtos padrão
+      const initialProductList = Object.entries(DEFAULT_PRODUCTS)
+        .flatMap(([category, names]) =>
+          names.map(name => ({
+            id: Date.now() + Math.random(),
+            name,
+            category,
+            quantity: 1,
+            quantityType: 'Unidade',
+            completed: false
+          }))
+        );
+      
+      const initialList = {
+        id: Date.now() + Math.random(),
+        name: "Minha Primeira Lista",
+        categories: [],         // ← começa sem categorias
+        productList: []         // ← começa sem produtos
+      };
+      lists.push(initialList);
+      currentListId = initialList.id;
+      await saveAll();
+    }
+  }
+  
+  // 1) Renderiza checkboxes de categorias-padrão
+function renderDefaultCategories() {
+  const container = document.getElementById("defaultCategoriesContainer");
+  container.innerHTML = DEFAULT_CATEGORIES
+    .map(cat => `
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" value="${cat}" id="defCat-${cat}">
+        <label class="form-check-label" for="defCat-${cat}">${cat}</label>
+      </div>`)
+    .join("");
+}
+
+// 2) Mostra o modal
+document.getElementById("btnManageCategories")
+  .addEventListener("click", () => {
+    renderDefaultCategories();
+    bootstrap.Modal.getOrCreateInstance(
+      document.getElementById("manageCategoriesModal")
+    ).show();
+  });
+
+// 3) Ao clicar em “Adicionar Selecionadas”
+document.getElementById("btnAddSelectedCategories")
+  .addEventListener("click", async () => {
+    const currentList = getCurrentList();
+    DEFAULT_CATEGORIES.forEach(cat => {
+      const cb = document.getElementById(`defCat-${cat}`);
+      if (cb.checked && !currentList.categories.includes(cat)) {
+        addCategory(cat);
+      }
+    });
+    renderCategoriesInSidebar();
+    renderCategorySelect();
+    await saveAll();
+    bootstrap.Modal.getInstance(
+      document.getElementById("manageCategoriesModal")
+    ).hide();
+  });
+
+  // referenciando os elementos
+const categorySelect = document.getElementById("categorySelect");
+const quickGroup     = document.getElementById("quickAddGroup");
+const quickContainer = document.getElementById("quickCheckboxes");
+const btnQuickAdd    = document.getElementById("btnQuickAddSelected");
+
+// 1) ao mudar a categoria, renderiza os checkboxes
+categorySelect.addEventListener("change", () => {
+  const cat = categorySelect.value;
+  quickContainer.innerHTML = "";
+  
+  if (!cat || !DEFAULT_PRODUCTS[cat]) {
+    quickGroup.style.display = "none";
+    return;
+  }
+
+  // monta um checkbox por produto padrão dessa categoria
+  DEFAULT_PRODUCTS[cat].forEach(name => {
+    const id = `qprod-${name.replace(/\s+/g, "-")}`;
+    quickContainer.insertAdjacentHTML("beforeend", `
+      <div class="form-check mb-1">
+        <input class="form-check-input" type="checkbox" value="${name}" id="${id}">
+        <label class="form-check-label" for="${id}">${name}</label>
+      </div>
+    `);
+  });
+
+  quickGroup.style.display = "block";
+});
+
+// 2) ao clicar em “Adicionar Selecionados”, faz bulk-add
+btnQuickAdd.addEventListener("click", () => {
+  const cat = categorySelect.value;
+  if (!cat) return;
+
+  DEFAULT_PRODUCTS[cat].forEach(name => {
+    const cb = document.getElementById(`qprod-${name.replace(/\s+/g, "-")}`);
+    if (cb && cb.checked) {
+      addProduct(name, cat, 1, "Unidade");
+    }
+  });
+
+  renderCategories();        // atualiza a view principal
+  renderCategorySelect();    // “limpa” o quick-add
+  quickGroup.style.display = "none";
+});
+
+document.getElementById("btnDeleteAllProducts").addEventListener("click", async () => {
+  if (!confirm("Tem certeza que deseja excluir todos os produtos da lista atual?")) return;
+
+  const currentList = getCurrentList();
+  if (!currentList) return;
+
+  currentList.productList = []; // limpa tudo
+  await saveAll();
+  renderCategories();           // atualiza view principal
+  renderPreviousProductsList(); // atualiza histórico
 });
